@@ -1,202 +1,174 @@
-<!DOCTYPE html>
-<html lang="pt">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Controle de Backups</title>
-    <link rel="stylesheet" href="styles.css">
-    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-    <script src="script.js" defer></script>
-</head>
-<body>
-    <header class="banner">
-        <div class="banner-content"></div>
-    </header>
-    <h1 id="client-name">Controle de Backups</h1>
+document.addEventListener('DOMContentLoaded', function () {
+    const urlParams = new URLSearchParams(window.location.search);
+    const client = urlParams.get('client');
+    document.getElementById('client-name').textContent = `Controle de Backups - ${client || 'Cliente Padrão'}`;
 
-    <div class="home-button">
-        <button onclick="goHome()">Home</button>
-    </div>
-    <div class="transport-button">
-        <button onclick="goToTransportPage()">Página de Transporte</button>
-    </div>
+    document.getElementById('data-form').addEventListener('submit', function (event) {
+        event.preventDefault();
+        const serial = document.getElementById('serial').value.trim().toUpperCase();
+        const model = document.getElementById('model').value.trim().toUpperCase();
+        const date = new Date().toISOString().split('T')[0];
+        const currie = document.getElementById('currie').value.trim().toUpperCase();
 
-    <form id="data-form">
-        <label for="serial">ESN:</label>
-        <input type="text" id="serial" name="serial" required>
-        <span id="duplicate-message" class="error-message"></span>
-        <button type="button" id="remove-duplicate-btn" class="remove-btn" style="display:none;" onclick="removeDuplicate()">Remover Duplicado</button>
-
-        <label for="model">Modelo:</label>
-        <input type="text" id="model" name="model" required>
-
-        <label for="currie">Nome Courier:</label>
-        <select id="currie" name="currie" required></select>
-
-        <div class="buttons">
-            <button type="submit">Adicionar ESN</button>
-        </div>
-    </form>
-
-    <h2>Dados Registrados</h2>
-    <div class="search-container">
-        <select id="search-column">
-            <option value="1">ESN</option>
-            <option value="2">Modelo</option>
-            <option value="3">Data</option>
-            <option value="4">Nome Courier</option>
-            <option value="5">Tempo no Sistema</option>
-        </select>
-        <input type="text" id="search-box" placeholder="Digite para pesquisar...">
-    </div>
-
-    <div id="table-container" style="height: 500px; overflow-y: auto;">
-        <table id="data-table">
-            <thead>
-                <tr>
-                    <th>#</th>
-                    <th>ESN</th>
-                    <th>Modelo</th>
-                    <th>Data</th>
-                    <th>Nome Courier</th>
-                    <th>Tempo no Sistema</th>
-                    <th>Ações</th>
-                </tr>
-            </thead>
-            <tbody>
-                <!-- Dados serão adicionados aqui -->
-            </tbody>
-        </table>
-    </div>
-
-    <div class="action-buttons">
-        <input type="file" id="import-file" style="display:none;">
-        <button type="button" id="import-btn">Importar Excel</button>
-        <button id="export-btn">Exportar para Excel</button>
-    </div>
-    <script>
-        function goToTransportPage() {
-            window.location.href = 'transport.html';
+        if (!serial || !model || !currie) {
+            alert('Preencha todos os campos antes de adicionar.');
+            return;
         }
 
-        function goHome() {
-            window.location.href = 'index.html';
-        }
-
-        document.addEventListener('DOMContentLoaded', function () {
-            carregarDadosDoBackend();
-
-            document.getElementById('data-form').addEventListener('submit', async function (event) {
-                event.preventDefault();
-
-                const serial = document.getElementById('serial').value.trim().toUpperCase();
-                const model = document.getElementById('model').value.trim().toUpperCase();
-                const currie = document.getElementById('currie').value.trim().toUpperCase();
-
-                if (!serial || !model || !currie) {
-                    alert('Preencha todos os campos antes de adicionar.');
-                    return;
-                }
-
-                const newData = { serial, model, currie };
-
-                try {
-                    const response = await fetch('https://seu-servidor-url/add', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(newData)
-                    });
-
-                    const savedData = await response.json();
-                    adicionarLinhaNaTabela(savedData);
-                    document.getElementById('data-form').reset();
-                } catch (error) {
-                    console.error('Erro ao adicionar dado:', error);
-                }
-            });
-
-            document.getElementById('import-btn').addEventListener('click', function () {
-                document.getElementById('import-file').click();
-            });
-
-            document.getElementById('import-file').addEventListener('change', function (event) {
-                const file = event.target.files[0];
-                if (!file) return;
-
-                const reader = new FileReader();
-
-                reader.onload = function (e) {
-                    try {
-                        const data = new Uint8Array(e.target.result);
-                        const workbook = XLSX.read(data, { type: 'array' });
-                        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                        const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
-
-                        jsonData.forEach((row, index) => {
-                            if (index === 0) return; // Ignora o cabeçalho
-                            let [serial, model, date, currie] = row;
-
-                            if (serial && model && date && currie) {
-                                serial = String(serial).trim().toUpperCase();
-                                model = String(model).trim().toUpperCase();
-                                currie = String(currie).trim().toUpperCase();
-                                const formattedDate = typeof date === 'number' ? excelDateToISO(date) : date;
-                                adicionarLinhaNaTabela({ serial, model, date: formattedDate, currie });
-                            }
-                        });
-                    } catch (error) {
-                        console.error("Erro ao processar a planilha:", error);
-                    }
-                };
-
-                reader.readAsArrayBuffer(file);
-            });
-
-            document.getElementById('export-btn').addEventListener('click', function () {
-                const table = document.getElementById('data-table');
-                const wb = XLSX.utils.table_to_book(table, { sheet: "Dados" });
-                XLSX.writeFile(wb, 'dados.xlsx');
-            });
-        });
-
-        async function carregarDadosDoBackend() {
-            try {
-                const response = await fetch('https://seu-servidor-url/dados');
-                const dados = await response.json();
-
-                dados.forEach(dado => {
-                    adicionarLinhaNaTabela(dado);
-                });
-            } catch (error) {
-                console.error('Erro ao carregar dados do backend:', error);
+        const duplicateRow = isDuplicateSerial(serial);
+        if (duplicateRow) {
+            if (confirm("ESN já registrado! Deseja remover o ESN existente?")) {
+                removeRow(duplicateRow);
+            } else {
+                document.getElementById('serial').style.borderColor = "red";
+                return;
             }
         }
 
-        function adicionarLinhaNaTabela(dado) {
-            const tableBody = document.querySelector('#data-table tbody');
-            const row = document.createElement('tr');
+        document.getElementById('serial').style.borderColor = "";
+        addNewEntry(serial, model, date, currie);
+        document.getElementById('data-form').reset();
+        sortTableByColumn(1);
+        updateTimeColumn();
+    });
 
-            row.innerHTML = `
-                <td>${tableBody.children.length + 1}</td>
-                <td>${dado.serial}</td>
-                <td>${dado.model}</td>
-                <td>${dado.date}</td>
-                <td>${dado.currie}</td>
-                <td>${dado.daysInSystem}</td>
-                <td><button onclick="removeRow(this)">Remover</button></td>
-            `;
-            tableBody.appendChild(row);
-        }
+    document.getElementById('import-btn').addEventListener('click', function () {
+        document.getElementById('import-file').click();
+    });
 
-        function removeRow(button) {
-            const row = button.closest('tr');
-            row.parentElement.removeChild(row);
-        }
+    document.getElementById('import-file').addEventListener('change', function (event) {
+        const file = event.target.files[0];
+        if (!file) return;
 
-        function excelDateToISO(excelDate) {
-            const date = new Date((excelDate - 25569) * 86400 * 1000);
-            return date.toISOString().split('T')[0];
+        const reader = new FileReader();
+
+        reader.onload = function (e) {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+
+                jsonData.forEach((row, index) => {
+                    if (index === 0) return; // Ignora o cabeçalho
+                    let [serial, model, date, currie] = row;
+
+                    if (serial && model && date && currie) {
+                        serial = String(serial).trim().toUpperCase();
+                        model = String(model).trim().toUpperCase();
+                        currie = String(currie).trim().toUpperCase();
+                        const formattedDate = typeof date === 'number' ? excelDateToISO(date) : date;
+                        addNewEntry(serial, model, formattedDate, currie);
+                    }
+                });
+
+                updateTimeColumn();
+            } catch (error) {
+                console.error("Erro ao processar a planilha:", error);
+            }
+        };
+
+        reader.onerror = function (error) {
+            console.error("Erro ao carregar o arquivo:", error);
+        };
+
+        reader.readAsArrayBuffer(file);
+    });
+
+    document.getElementById('export-btn').addEventListener('click', function () {
+        const table = document.getElementById('data-table');
+        const wb = XLSX.utils.table_to_book(table, { sheet: "Dados" });
+        XLSX.writeFile(wb, 'dados.xlsx');
+    });
+
+    document.getElementById('serial').addEventListener('input', function () {
+        const serial = this.value.trim().toUpperCase();
+        const duplicateRow = isDuplicateSerial(serial);
+        const serialField = document.getElementById('serial');
+        const duplicateMessage = document.getElementById('duplicate-message');
+
+        if (duplicateRow) {
+            serialField.style.borderColor = "red";
+            duplicateMessage.textContent = "ESN já registrado!";
+            duplicateMessage.style.color = "red";
+        } else {
+            serialField.style.borderColor = "";
+            duplicateMessage.textContent = "";
         }
-    </script>
-</body>
-</html>
+    });
+
+    function isDuplicateSerial(serial) {
+        const rows = document.querySelectorAll('#data-table tbody tr');
+        for (const row of rows) {
+            if (row.cells[1].textContent === serial) return row;
+        }
+        return null;
+    }
+
+    function addNewEntry(serial, model, date, currie) {
+        const tableBody = document.querySelector('#data-table tbody');
+        const row = document.createElement('tr');
+        const formattedDate = formatDate(date);
+
+        row.innerHTML = `
+            <td>${tableBody.children.length + 1}</td>
+            <td>${serial}</td>
+            <td>${model}</td>
+            <td>${formattedDate}</td>
+            <td>${currie}</td>
+            <td></td>
+            <td><button onclick="removeRow(this)">Remover</button></td>
+        `;
+        tableBody.appendChild(row);
+        addCourierToSelect(currie);
+    }
+
+    function formatDate(date) {
+        return date.split('-').reverse().join('/');
+    }
+
+    function excelDateToISO(excelDate) {
+        const date = new Date((excelDate - 25569) * 86400 * 1000);
+        return date.toISOString().split('T')[0];
+    }
+
+    function removeRow(button) {
+        const row = button.closest('tr');
+        row.parentElement.removeChild(row);
+        updateTimeColumn();
+    }
+
+    function sortTableByColumn(columnIndex) {
+        const rows = Array.from(document.querySelectorAll('#data-table tbody tr'));
+        rows.sort((a, b) => a.cells[columnIndex].textContent.localeCompare(b.cells[columnIndex].textContent));
+        const tableBody = document.querySelector('#data-table tbody');
+        rows.forEach(row => tableBody.appendChild(row));
+    }
+
+    function updateTimeColumn() {
+        const rows = document.querySelectorAll('#data-table tbody tr');
+        rows.forEach(row => {
+            const dateCell = row.cells[3];
+            const timeCell = row.cells[5];
+            const entryDate = new Date(dateCell.textContent.split('/').reverse().join('-'));
+            const daysInSystem = calculateDaysInSystem(entryDate);
+            const daysColor = getDaysColor(daysInSystem);
+
+            timeCell.textContent = `${daysInSystem} dias`;
+            timeCell.style.color = daysColor;
+        });
+    }
+
+    function calculateDaysInSystem(date) {
+        const currentDate = new Date();
+        const entryDate = new Date(date);
+        return Math.floor((currentDate - entryDate) / (1000 * 60 * 60 * 24));
+    }
+
+    function getDaysColor(days) {
+        if (days <= 30) return 'green';
+        else if (days <= 60) return 'orange';
+        else return 'red';
+    }
+
+    function
