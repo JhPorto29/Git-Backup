@@ -17,7 +17,13 @@ mongoose
   .catch((err) => console.error('Erro ao conectar ao MongoDB:', err));
 
 // Modelo de Dados
-const DataSchema = new mongoose.Schema({ name: String });
+const DataSchema = new mongoose.Schema({
+  serial: String,
+  model: String,
+  date: String,
+  currie: String
+});
+
 const Data = mongoose.model('Data', DataSchema);
 
 // Rota Inicial
