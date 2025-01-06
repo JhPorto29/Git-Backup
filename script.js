@@ -3,6 +3,27 @@ document.addEventListener('DOMContentLoaded', function () {
     const client = urlParams.get('client');
     document.getElementById('client-name').textContent = `Controle de Backups - ${client || 'Cliente Padrão'}`;
 
+    // Nova função para carregar dados do backend
+    async function carregarDadosDoBackend() {
+        try {
+            const response = await fetch('https://seu-servidor.railway.app/dados');
+            if (!response.ok) throw new Error('Erro ao carregar dados do servidor');
+            
+            const dados = await response.json();
+            
+            dados.forEach(entry => {
+                addNewEntry(entry.serial, entry.model, entry.date, entry.currie);
+            });
+
+            updateTimeColumn(); // Atualiza a coluna de tempo após carregar os dados
+        } catch (error) {
+            console.error('Erro ao buscar dados do backend:', error);
+        }
+    }
+
+    carregarDadosDoBackend(); // Carrega os dados do backend ao abrir a página
+
+    // Restante do código já existente, sem alterações
     document.getElementById('data-form').addEventListener('submit', function (event) {
         event.preventDefault();
         const serial = document.getElementById('serial').value.trim().toUpperCase();
