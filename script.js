@@ -32,6 +32,71 @@ document.addEventListener('DOMContentLoaded', function () {
         updateTimeColumn();
     });
 
+    document.getElementById('import-btn').addEventListener('click', function () {
+        document.getElementById('import-file').click();
+    });
+
+    document.getElementById('import-file').addEventListener('change', function (event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+
+        reader.onload = function (e) {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+
+                jsonData.forEach((row, index) => {
+                    if (index === 0) return; // Ignora o cabeçalho
+                    let [serial, model, date, currie] = row;
+
+                    if (serial && model && date && currie) {
+                        serial = String(serial).trim().toUpperCase();
+                        model = String(model).trim().toUpperCase();
+                        currie = String(currie).trim().toUpperCase();
+                        const formattedDate = typeof date === 'number' ? excelDateToISO(date) : date;
+                        addNewEntry(serial, model, formattedDate, currie);
+                    }
+                });
+
+                updateTimeColumn();
+            } catch (error) {
+                console.error("Erro ao processar a planilha:", error);
+            }
+        };
+
+        reader.onerror = function (error) {
+            console.error("Erro ao carregar o arquivo:", error);
+        };
+
+        reader.readAsArrayBuffer(file);
+    });
+
+    document.getElementById('export-btn').addEventListener('click', function () {
+        const table = document.getElementById('data-table');
+        const wb = XLSX.utils.table_to_book(table, { sheet: "Dados" });
+        XLSX.writeFile(wb, 'dados.xlsx');
+    });
+
+    document.getElementById('serial').addEventListener('input', function () {
+        const serial = this.value.trim().toUpperCase();
+        const duplicateRow = isDuplicateSerial(serial);
+        const serialField = document.getElementById('serial');
+        const duplicateMessage = document.getElementById('duplicate-message');
+
+        if (duplicateRow) {
+            serialField.style.borderColor = "red";
+            duplicateMessage.textContent = "ESN já registrado!";
+            duplicateMessage.style.color = "red";
+        } else {
+            serialField.style.borderColor = "";
+            duplicateMessage.textContent = "";
+        }
+    });
+
     function isDuplicateSerial(serial) {
         const rows = document.querySelectorAll('#data-table tbody tr');
         for (const row of rows) {
@@ -62,6 +127,11 @@ document.addEventListener('DOMContentLoaded', function () {
         return date.split('-').reverse().join('/');
     }
 
+    function excelDateToISO(excelDate) {
+        const date = new Date((excelDate - 25569) * 86400 * 1000);
+        return date.toISOString().split('T')[0];
+    }
+
     function removeRow(button) {
         const row = button.closest('tr');
         row.parentElement.removeChild(row);
@@ -75,28 +145,60 @@ document.addEventListener('DOMContentLoaded', function () {
         rows.forEach(row => tableBody.appendChild(row));
     }
 
+    function calculateDaysInSystem(date) {
+        const currentDate = new Date();
+        const entryDate = new Date(date);
+        return Math.floor((currentDate - entryDate) / (1000 * 60 * 60 * 24));
+    }
+
+    function getDaysColor(days) {
+        if (days <= 30) return 'green';
+        else if (days <= 60) return 'orange';
+        else return 'red';
+    }
+
     function addCourierToSelect(currie) {
         const select = document.getElementById('currie');
-        if (![...select.options].some(option => option.value === currie)) {
+        if (!Array.from(select.options).some(option => option.value === currie)) {
             const option = document.createElement('option');
             option.value = currie;
-            option.textContent = currie;
+            option.text = currie;
             select.appendChild(option);
         }
     }
 
+    function updateTimeColumn() {
+        const rows = document.querySelectorAll('#data-table tbody tr');
+        rows.forEach(row => {
+            const dateCell = row.cells[3];
+            const timeCell = row.cells[5];
+            const entryDate = new Date(dateCell.textContent.split('/').reverse().join('-'));
+            const daysInSystem = calculateDaysInSystem(entryDate);
+            const daysColor = getDaysColor(daysInSystem);
+
+            timeCell.textContent = `${daysInSystem} dias`;
+            timeCell.style.color = daysColor;
+        });
+    }
+
     document.getElementById('search-box').addEventListener('input', function () {
-        const input = this.value.trim().toUpperCase();
-        const table = document.getElementById('data-table');
-        const rows = table.querySelectorAll('tbody tr');
-        const column = parseInt(document.getElementById('search-column').value);
+        const searchValue = this.value.trim().toLowerCase();
+        const searchColumn = document.getElementById('search-column').value;
+        const rows = document.querySelectorAll('#data-table tbody tr');
 
         rows.forEach(row => {
-            const cell = row.cells[column];
-            if (cell) {
-                const txtValue = cell.textContent || cell.innerText;
-                row.style.display = txtValue.toUpperCase().includes(input) ? "" : "none";
+            const cell = row.cells[searchColumn];
+            if (cell && cell.textContent.toLowerCase().includes(searchValue)) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
             }
         });
     });
+
+    document.getElementById('search-column').addEventListener('change', function () {
+        document.getElementById('search-box').value = '';
+        updateTimeColumn();
+    });
 });
+
