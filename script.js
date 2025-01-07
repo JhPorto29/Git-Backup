@@ -1,10 +1,14 @@
 document.addEventListener('DOMContentLoaded', function () {
-    const urlParams = new URLSearchParams(window.location.search);
-    const client = urlParams.get('client');
-    document.getElementById('client-name').textContent = `Controle de Backups - ${client || 'Cliente Padrão'}`;
+    const clientNameElement = document.getElementById('client-name');
+    const clientName = new URLSearchParams(window.location.search).get('client') || 'Cliente Padrão';
+    clientNameElement.textContent = `Controle de Backups - ${clientName}`;
 
-    document.getElementById('data-form').addEventListener('submit', function (event) {
+    // Carregar dados do servidor ao carregar a página
+    loadDataFromServer();
+
+    document.getElementById('data-form').addEventListener('submit', async function (event) {
         event.preventDefault();
+
         const serial = document.getElementById('serial').value.trim().toUpperCase();
         const model = document.getElementById('model').value.trim().toUpperCase();
         const date = new Date().toISOString().split('T')[0];
@@ -26,7 +30,13 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         document.getElementById('serial').style.borderColor = "";
+
+        // Adicionar na tabela
         addNewEntry(serial, model, date, currie);
+
+        // Salvar no servidor
+        await saveDataToServer(serial, model, date, currie);
+
         document.getElementById('data-form').reset();
         sortTableByColumn(1);
         updateTimeColumn();
@@ -36,42 +46,32 @@ document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('import-file').click();
     });
 
-    document.getElementById('import-file').addEventListener('change', function (event) {
+    document.getElementById('import-file').addEventListener('change', async function (event) {
         const file = event.target.files[0];
         if (!file) return;
 
         const reader = new FileReader();
-
-        reader.onload = function (e) {
+        reader.onload = async function (e) {
             try {
                 const data = new Uint8Array(e.target.result);
                 const workbook = XLSX.read(data, { type: 'array' });
                 const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
                 const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
 
-                jsonData.forEach((row, index) => {
-                    if (index === 0) return; // Ignora o cabeçalho
-                    let [serial, model, date, currie] = row;
-
+                for (const [index, row] of jsonData.entries()) {
+                    if (index === 0) continue; // Ignora o cabeçalho
+                    const [serial, model, date, currie] = row.map(item => String(item).trim().toUpperCase());
                     if (serial && model && date && currie) {
-                        serial = String(serial).trim().toUpperCase();
-                        model = String(model).trim().toUpperCase();
-                        currie = String(currie).trim().toUpperCase();
                         const formattedDate = typeof date === 'number' ? excelDateToISO(date) : date;
                         addNewEntry(serial, model, formattedDate, currie);
+                        await saveDataToServer(serial, model, formattedDate, currie);
                     }
-                });
-
+                }
                 updateTimeColumn();
             } catch (error) {
                 console.error("Erro ao processar a planilha:", error);
             }
         };
-
-        reader.onerror = function (error) {
-            console.error("Erro ao carregar o arquivo:", error);
-        };
-
         reader.readAsArrayBuffer(file);
     });
 
@@ -81,21 +81,30 @@ document.addEventListener('DOMContentLoaded', function () {
         XLSX.writeFile(wb, 'dados.xlsx');
     });
 
-    document.getElementById('serial').addEventListener('input', function () {
-        const serial = this.value.trim().toUpperCase();
-        const duplicateRow = isDuplicateSerial(serial);
-        const serialField = document.getElementById('serial');
-        const duplicateMessage = document.getElementById('duplicate-message');
-
-        if (duplicateRow) {
-            serialField.style.borderColor = "red";
-            duplicateMessage.textContent = "ESN já registrado!";
-            duplicateMessage.style.color = "red";
-        } else {
-            serialField.style.borderColor = "";
-            duplicateMessage.textContent = "";
+    async function loadDataFromServer() {
+        try {
+            const response = await fetch('http://localhost:3000/api/backups');
+            if (!response.ok) throw new Error('Erro ao carregar os dados do servidor.');
+            const backups = await response.json();
+            backups.forEach(entry => addNewEntry(entry.serial, entry.model, entry.date, entry.currie));
+            updateTimeColumn();
+        } catch (error) {
+            console.error('Erro ao carregar dados do servidor:', error);
         }
-    });
+    }
+
+    async function saveDataToServer(serial, model, date, currie) {
+        try {
+            const response = await fetch('http://localhost:3000/api/backups', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ serial, model, date, currie }),
+            });
+            if (!response.ok) throw new Error('Erro ao salvar os dados no servidor.');
+        } catch (error) {
+            console.error('Erro ao salvar os dados no servidor:', error);
+        }
+    }
 
     function isDuplicateSerial(serial) {
         const rows = document.querySelectorAll('#data-table tbody tr');
@@ -108,19 +117,16 @@ document.addEventListener('DOMContentLoaded', function () {
     function addNewEntry(serial, model, date, currie) {
         const tableBody = document.querySelector('#data-table tbody');
         const row = document.createElement('tr');
-        const formattedDate = formatDate(date);
-
         row.innerHTML = `
             <td>${tableBody.children.length + 1}</td>
             <td>${serial}</td>
             <td>${model}</td>
-            <td>${formattedDate}</td>
+            <td>${formatDate(date)}</td>
             <td>${currie}</td>
             <td></td>
             <td><button onclick="removeRow(this)">Remover</button></td>
         `;
         tableBody.appendChild(row);
-        addCourierToSelect(currie);
     }
 
     function formatDate(date) {
@@ -145,28 +151,6 @@ document.addEventListener('DOMContentLoaded', function () {
         rows.forEach(row => tableBody.appendChild(row));
     }
 
-    function calculateDaysInSystem(date) {
-        const currentDate = new Date();
-        const entryDate = new Date(date);
-        return Math.floor((currentDate - entryDate) / (1000 * 60 * 60 * 24));
-    }
-
-    function getDaysColor(days) {
-        if (days <= 30) return 'green';
-        else if (days <= 60) return 'orange';
-        else return 'red';
-    }
-
-    function addCourierToSelect(currie) {
-        const select = document.getElementById('currie');
-        if (!Array.from(select.options).some(option => option.value === currie)) {
-            const option = document.createElement('option');
-            option.value = currie;
-            option.text = currie;
-            select.appendChild(option);
-        }
-    }
-
     function updateTimeColumn() {
         const rows = document.querySelectorAll('#data-table tbody tr');
         rows.forEach(row => {
@@ -181,24 +165,15 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    document.getElementById('search-box').addEventListener('input', function () {
-        const searchValue = this.value.trim().toLowerCase();
-        const searchColumn = document.getElementById('search-column').value;
-        const rows = document.querySelectorAll('#data-table tbody tr');
+    function calculateDaysInSystem(date) {
+        const currentDate = new Date();
+        const entryDate = new Date(date);
+        return Math.floor((currentDate - entryDate) / (1000 * 60 * 60 * 24));
+    }
 
-        rows.forEach(row => {
-            const cell = row.cells[searchColumn];
-            if (cell && cell.textContent.toLowerCase().includes(searchValue)) {
-                row.style.display = '';
-            } else {
-                row.style.display = 'none';
-            }
-        });
-    });
-
-    document.getElementById('search-column').addEventListener('change', function () {
-        document.getElementById('search-box').value = '';
-        updateTimeColumn();
-    });
+    function getDaysColor(days) {
+        if (days <= 30) return 'green';
+        else if (days <= 60) return 'orange';
+        else return 'red';
+    }
 });
-
