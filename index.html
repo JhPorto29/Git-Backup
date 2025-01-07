@@ -3,118 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Controle de Backups</title>
+    <title>Seleção de Cliente</title>
     <link rel="stylesheet" href="styles.css">
-    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-    <script src="script.js" defer></script>
 </head>
 <body>
     <header class="banner">
-        <div class="banner-content"></div>
-    </header>
-    <h1 id="client-name">Controle de Backups</h1>
-
-    <div class="home-button">
-        <button onclick="goHome()">Home</button>
-    </div>
-    <div class="transport-button">
-        <button onclick="goToTransportPage()">Página de Transporte</button>
-    </div>
-
-    <form id="data-form">
-        <label for="serial">ESN:</label>
-        <input type="text" id="serial" name="serial" required>
-        <span id="duplicate-message" class="error-message"></span>
-        <button type="button" id="remove-duplicate-btn" class="remove-btn" style="display:none;" onclick="removeDuplicate()">Remover Duplicado</button>
-
-        <label for="model">Modelo:</label>
-        <input type="text" id="model" name="model" required>
-
-        <label for="currie">Nome Courier:</label>
-        <select id="currie" name="currie" required></select>
-
-        <div class="buttons">
-            <button type="submit">Adicionar ESN</button>
+        <div class="banner-content">
+            <!-- Logo removido -->
         </div>
-    </form>
-
-    <h2>Dados Registrados</h2>
-    <div class="search-container">
-        <select id="search-column">
-            <option value="1">ESN</option>
-            <option value="2">Modelo</option>
-            <option value="3">Data</option>
-            <option value="4">Nome Courier</option>
-            <option value="5">Tempo no Sistema</option>
-        </select>
-        <input type="text" id="search-box" placeholder="Digite para pesquisar...">
+    </header>
+    <h1>Selecione o Cliente</h1>
+    <div class="client-selection">
+        <button onclick="selectClient('Cielo')">Cielo</button>
+        <button onclick="selectClient('C6 Bank')">C6 Bank</button>
+        <button onclick="selectClient('PicPay')">PicPay</button>
+        <button onclick="selectClient('Fiserv')">Fiserv</button>
+        <button onclick="selectClient('Mooz')">Mooz</button>
     </div>
 
-    <div id="table-container" style="height: 500px; overflow-y: auto;">
-        <table id="data-table">
-            <thead>
-                <tr>
-                    <th>#</th>
-                    <th>ESN</th>
-                    <th>Modelo</th>
-                    <th>Data</th>
-                    <th>Nome Courier</th>
-                    <th>Tempo no Sistema</th>
-                    <th>Ações</th>
-                </tr>
-            </thead>
-            <tbody>
-                <!-- Dados serão adicionados aqui -->
-            </tbody>
-        </table>
-    </div>
-
-    <div class="action-buttons">
-        <input type="file" id="import-file" style="display:none;">
-        <button type="button" id="import-btn">Importar Excel</button>
-        <button id="export-btn">Exportar para Excel</button>
-    </div>
     <script>
-        function goToTransportPage() {
-            window.location.href = 'transport.html';
-        }
-
-        function goHome() {
-            window.location.href = 'index.html';
-        }
-
-        function removeRow(button) {
-            const row = button.closest('tr');
-            row.parentElement.removeChild(row);
-            updateTimeColumn();
-        }
-
-        function updateTimeColumn() {
-            const rows = document.querySelectorAll('#data-table tbody tr');
-            rows.forEach(row => {
-                const dateCell = row.cells[3];
-                const timeCell = row.cells[5];
-                const entryDate = new Date(dateCell.textContent.split('/').reverse().join('-'));
-                const daysInSystem = calculateDaysInSystem(entryDate);
-                const daysColor = getDaysColor(daysInSystem);
-
-                timeCell.textContent = `${daysInSystem} dias`;
-                timeCell.style.color = daysColor;
-            });
-        }
-
-        function calculateDaysInSystem(date) {
-            const currentDate = new Date();
-            const entryDate = new Date(date);
-            return Math.floor((currentDate - entryDate) / (1000 * 60 * 60 * 24));
-        }
-
-        function getDaysColor(days) {
-            if (days <= 30) return 'green';
-            else if (days <= 60) return 'orange';
-            else return 'red';
+        function selectClient(client) {
+            window.location.href = `cliente.html?client=${client}`;
         }
     </script>
 </body>
 </html>
-
