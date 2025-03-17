@@ -50,29 +50,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const file = event.target.files[0];
         if (!file) return;
 
-        const reader = new FileReader();
-        reader.onload = async function (e) {
-            try {
-                const data = new Uint8Array(e.target.result);
-                const workbook = XLSX.read(data, { type: 'array' });
-                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
-
-                for (const [index, row] of jsonData.entries()) {
-                    if (index === 0) continue; // Ignora o cabeçalho
-                    const [serial, model, date, currie] = row.map(item => String(item).trim().toUpperCase());
-                    if (serial && model && date && currie) {
-                        const formattedDate = typeof date === 'number' ? excelDateToISO(date) : date;
-                        addNewEntry(serial, model, formattedDate, currie);
-                        await saveDataToServer(serial, model, formattedDate, currie);
-                    }
-                }
-                updateTimeColumn();
-            } catch (error) {
-                console.error("Erro ao processar a planilha:", error);
-            }
-        };
-        reader.readAsArrayBuffer(file);
+        readExcelFile(file);
     });
 
     document.getElementById('export-btn').addEventListener('click', function () {
@@ -177,3 +155,49 @@ document.addEventListener('DOMContentLoaded', function () {
         else return 'red';
     }
 });
+
+function readExcelFile(file) {
+    const reader = new FileReader();
+    reader.onload = function (e) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+        jsonData.forEach((row, index) => {
+            if (index > 0) { // Ignora o cabeçalho
+                const esn = row[0];
+                const model = row[1];
+                const date = formatDate(row[2]);
+                const courierName = row[3];
+                addRowToTable(esn, model, date, courierName);
+            }
+        });
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+function formatDate(excelDate) {
+    const date = new Date((excelDate - (25567 + 2)) * 86400 * 1000);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+}
+
+function addRowToTable(esn, model, date, courierName) {
+    const tableBody = document.querySelector('#data-table tbody');
+    const row = document.createElement('tr');
+    row.innerHTML = `
+        <td></td>
+        <td>${esn}</td>
+        <td>${model}</td>
+        <td>${date}</td>
+        <td>${courierName}</td>
+        <td></td>
+        <td><button onclick="removeRow(this)">Remover</button></td>
+    `;
+    tableBody.appendChild(row);
+    updateTimeColumn();
+}
