@@ -24,15 +24,17 @@
     <form id="data-form">
         <label for="serial">ESN:</label>
         <input type="text" id="serial" name="serial" required>
+        <span id="duplicate-message" class="error-message"></span>
+        <button type="button" id="remove-duplicate-btn" class="remove-btn" style="display:none;" onclick="removeDuplicate()">Remover Duplicado</button>
 
         <label for="model">Modelo:</label>
         <input type="text" id="model" name="model" required>
 
         <label for="courier">Nome Courier:</label>
-        <input type="text" id="courier-input" name="courier" placeholder="Digite ou selecione um nome">
-        <select id="courier-select">
-            <option value="">Selecione um Courier</option>
-        </select>
+        <input list="courier-list" id="courier" name="courier" required>
+        <datalist id="courier-list">
+            <option value="">Selecione um courier</option>
+        </datalist>
 
         <div class="buttons">
             <button type="submit">Adicionar ESN</button>
@@ -78,68 +80,12 @@
         <button id="export-btn">Exportar para Excel</button>
     </div>
     <script>
-        document.getElementById('data-form').addEventListener('submit', function(event) {
-            event.preventDefault();
-            const serial = document.getElementById('serial').value.trim();
-            const model = document.getElementById('model').value.trim();
-            const courierInput = document.getElementById('courier-input').value.trim();
-            const courierSelect = document.getElementById('courier-select');
-            const courier = courierInput || courierSelect.value;
-            const date = new Date().toLocaleDateString('pt-BR');
+        function goToTransportPage() {
+            window.location.href = 'transport.html';
+        }
 
-            if (!serial || !model || !courier) {
-                alert("Todos os campos são obrigatórios!");
-                return;
-            }
-
-            const table = document.getElementById('data-table').querySelector('tbody');
-            let duplicate = false;
-            table.querySelectorAll('tr').forEach(row => {
-                if (row.cells[1].textContent === serial) {
-                    duplicate = true;
-                    row.style.backgroundColor = 'red';
-                }
-            });
-
-            if (duplicate) {
-                if (!confirm("ESN já existe! Deseja adicionar mesmo assim?")) {
-                    return;
-                }
-            }
-
-            const row = table.insertRow();
-            row.innerHTML = `
-                <td>${table.rows.length}</td>
-                <td>${serial}</td>
-                <td>${model}</td>
-                <td>${date}</td>
-                <td>${courier}</td>
-                <td>0 dias</td>
-                <td><button onclick="removeRow(this)">Remover</button></td>
-            `;
-
-            document.getElementById('data-form').reset();
-            updateTimeColumn();
-            populateCourierSelect();
-        });
-
-        function populateCourierSelect() {
-            const courierSelect = document.getElementById('courier-select');
-            const rows = document.querySelectorAll('#data-table tbody tr');
-            const couriers = new Set();
-
-            rows.forEach(row => {
-                const courierName = row.cells[4].textContent;
-                couriers.add(courierName);
-            });
-
-            courierSelect.innerHTML = '<option value="">Selecione um Courier</option>';
-            couriers.forEach(courier => {
-                const option = document.createElement('option');
-                option.value = courier;
-                option.textContent = courier;
-                courierSelect.appendChild(option);
-            });
+        function goHome() {
+            window.location.href = 'index.html';
         }
 
         function removeRow(button) {
@@ -148,6 +94,158 @@
             updateTimeColumn();
             populateCourierSelect();
         }
+
+        function updateTimeColumn() {
+            const rows = document.querySelectorAll('#data-table tbody tr');
+            rows.forEach(row => {
+                const dateCell = row.cells[3];
+                const timeCell = row.cells[5];
+                const entryDate = new Date(dateCell.textContent.split('/').reverse().join('-'));
+                const daysInSystem = calculateDaysInSystem(entryDate);
+                const daysColor = getDaysColor(daysInSystem);
+
+                timeCell.textContent = `${daysInSystem} dias`;
+                timeCell.style.color = daysColor;
+            });
+        }
+
+        function calculateDaysInSystem(date) {
+            const currentDate = new Date();
+            const entryDate = new Date(date);
+            return Math.floor((currentDate - entryDate) / (1000 * 60 * 60 * 24));
+        }
+
+        function getDaysColor(days) {
+            if (days <= 30) return 'green';
+            else if (days <= 60) return 'orange';
+            else return 'red';
+        }
+
+        document.getElementById('import-btn').addEventListener('click', function () {
+            document.getElementById('import-file').click();
+        });
+
+        document.getElementById('import-file').addEventListener('change', function (e) {
+            const file = e.target.files[0];
+            if (file) {
+                readExcelFile(file);
+            }
+        });
+
+        document.getElementById('search-btn').addEventListener('click', function () {
+            const searchValue = document.getElementById('search-box').value.toLowerCase();
+            const searchColumn = parseInt(document.getElementById('search-column').value);
+            const rows = document.querySelectorAll('#data-table tbody tr');
+
+            rows.forEach(row => {
+                const cell = row.cells[searchColumn].textContent.toLowerCase();
+                if (cell.includes(searchValue)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        });
+
+        function populateCourierSelect() {
+            const courierList = document.getElementById('courier-list');
+            const rows = document.querySelectorAll('#data-table tbody tr');
+            const couriers = new Set();
+
+            rows.forEach(row => {
+                const courierName = row.cells[4].textContent;
+                couriers.add(courierName);
+            });
+
+            courierList.innerHTML = '<option value="">Selecione um courier</option>';
+            couriers.forEach(courier => {
+                const option = document.createElement('option');
+                option.value = courier;
+                option.textContent = courier;
+                courierList.appendChild(option);
+            });
+        }
+
+        document.getElementById('data-form').addEventListener('submit', function (event) {
+            event.preventDefault();
+
+            const serial = document.getElementById('serial').value.trim().toUpperCase();
+            const model = document.getElementById('model').value.trim().toUpperCase();
+            const courier = document.getElementById('courier').value.trim().toUpperCase();
+            const date = new Date().toISOString().split('T')[0];
+
+            if (!serial || !model || !courier) {
+                alert('Preencha todos os campos antes de adicionar.');
+                return;
+            }
+
+            const duplicateRow = isDuplicateSerial(serial);
+            if (duplicateRow) {
+                if (confirm("ESN já registrado! Deseja remover o ESN existente?")) {
+                    removeRow(duplicateRow);
+                } else {
+                    document.getElementById('serial').style.borderColor = "red";
+                    return;
+                }
+            }
+
+            document.getElementById('serial').style.borderColor = "";
+
+            // Adicionar na tabela
+            addNewEntry(serial, model, date, courier);
+
+            // Salvar no servidor
+            saveDataToServer(serial, model, date, courier);
+
+            document.getElementById('serial').value = '';
+            document.getElementById('model').value = '';
+            document.getElementById('serial').focus();
+            updateTimeColumn();
+        });
+
+        function isDuplicateSerial(serial) {
+            const rows = document.querySelectorAll('#data-table tbody tr');
+            for (const row of rows) {
+                if (row.cells[1].textContent === serial) return row;
+            }
+            return null;
+        }
+
+        function addNewEntry(serial, model, date, courier) {
+            const tableBody = document.querySelector('#data-table tbody');
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${tableBody.children.length + 1}</td>
+                <td>${serial}</td>
+                <td>${model}</td>
+                <td>${formatDate(date)}</td>
+                <td>${courier}</td>
+                <td></td>
+                <td><button onclick="removeRow(this)">Remover</button></td>
+            `;
+            tableBody.appendChild(row);
+        }
+
+        function formatDate(date) {
+            return date.split('-').reverse().join('/');
+        }
+
+        async function saveDataToServer(serial, model, date, courier) {
+            try {
+                const response = await fetch('http://localhost:3000/api/backups', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ serial, model, date, courier }),
+                });
+                if (!response.ok) throw new Error('Erro ao salvar os dados no servidor.');
+            } catch (error) {
+                console.error('Erro ao salvar os dados no servidor:', error);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            populateCourierSelect();
+        });
     </script>
 </body>
 </html>
