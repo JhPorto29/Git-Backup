@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Controle de Backups</title>
     <link rel="stylesheet" href="styles.css">
-    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js" async></script>
     <script src="script.js" defer></script>
 </head>
 <body>
@@ -24,14 +24,15 @@
     <form id="data-form">
         <label for="serial">ESN:</label>
         <input type="text" id="serial" name="serial" required>
-        <span id="duplicate-message" class="error-message"></span>
-        <button type="button" id="remove-duplicate-btn" class="remove-btn" style="display:none;" onclick="removeDuplicate()">Remover Duplicado</button>
 
         <label for="model">Modelo:</label>
         <input type="text" id="model" name="model" required>
 
-        <label for="currie">Nome Courier:</label>
-        <select id="currie" name="currie" required></select>
+        <label for="courier">Nome Courier:</label>
+        <input type="text" id="courier-input" name="courier" placeholder="Digite ou selecione um nome">
+        <select id="courier-select">
+            <option value="">Selecione um Courier</option>
+        </select>
 
         <div class="buttons">
             <button type="submit">Adicionar ESN</button>
@@ -48,6 +49,8 @@
             <option value="5">Tempo no Sistema</option>
         </select>
         <input type="text" id="search-box" placeholder="Digite para pesquisar...">
+        <button type="button" id="search-btn">Pesquisar</button>
+        <button type="button" id="clear-search-btn">Limpar Pesquisa</button>
     </div>
 
     <div id="table-container" style="height: 500px; overflow-y: auto;">
@@ -75,44 +78,75 @@
         <button id="export-btn">Exportar para Excel</button>
     </div>
     <script>
-        function goToTransportPage() {
-            window.location.href = 'transport.html';
-        }
+        document.getElementById('data-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const serial = document.getElementById('serial').value.trim();
+            const model = document.getElementById('model').value.trim();
+            const courierInput = document.getElementById('courier-input').value.trim();
+            const courierSelect = document.getElementById('courier-select');
+            const courier = courierInput || courierSelect.value;
+            const date = new Date().toLocaleDateString('pt-BR');
 
-        function goHome() {
-            window.location.href = 'index.html';
+            if (!serial || !model || !courier) {
+                alert("Todos os campos são obrigatórios!");
+                return;
+            }
+
+            const table = document.getElementById('data-table').querySelector('tbody');
+            let duplicate = false;
+            table.querySelectorAll('tr').forEach(row => {
+                if (row.cells[1].textContent === serial) {
+                    duplicate = true;
+                    row.style.backgroundColor = 'red';
+                }
+            });
+
+            if (duplicate) {
+                if (!confirm("ESN já existe! Deseja adicionar mesmo assim?")) {
+                    return;
+                }
+            }
+
+            const row = table.insertRow();
+            row.innerHTML = `
+                <td>${table.rows.length}</td>
+                <td>${serial}</td>
+                <td>${model}</td>
+                <td>${date}</td>
+                <td>${courier}</td>
+                <td>0 dias</td>
+                <td><button onclick="removeRow(this)">Remover</button></td>
+            `;
+
+            document.getElementById('data-form').reset();
+            updateTimeColumn();
+            populateCourierSelect();
+        });
+
+        function populateCourierSelect() {
+            const courierSelect = document.getElementById('courier-select');
+            const rows = document.querySelectorAll('#data-table tbody tr');
+            const couriers = new Set();
+
+            rows.forEach(row => {
+                const courierName = row.cells[4].textContent;
+                couriers.add(courierName);
+            });
+
+            courierSelect.innerHTML = '<option value="">Selecione um Courier</option>';
+            couriers.forEach(courier => {
+                const option = document.createElement('option');
+                option.value = courier;
+                option.textContent = courier;
+                courierSelect.appendChild(option);
+            });
         }
 
         function removeRow(button) {
             const row = button.closest('tr');
             row.parentElement.removeChild(row);
             updateTimeColumn();
-        }
-
-        function updateTimeColumn() {
-            const rows = document.querySelectorAll('#data-table tbody tr');
-            rows.forEach(row => {
-                const dateCell = row.cells[3];
-                const timeCell = row.cells[5];
-                const entryDate = new Date(dateCell.textContent.split('/').reverse().join('-'));
-                const daysInSystem = calculateDaysInSystem(entryDate);
-                const daysColor = getDaysColor(daysInSystem);
-
-                timeCell.textContent = `${daysInSystem} dias`;
-                timeCell.style.color = daysColor;
-            });
-        }
-
-        function calculateDaysInSystem(date) {
-            const currentDate = new Date();
-            const entryDate = new Date(date);
-            return Math.floor((currentDate - entryDate) / (1000 * 60 * 60 * 24));
-        }
-
-        function getDaysColor(days) {
-            if (days <= 30) return 'green';
-            else if (days <= 60) return 'orange';
-            else return 'red';
+            populateCourierSelect();
         }
     </script>
 </body>
